@@ -1,0 +1,15 @@
+{
+  "network_node_url": "https://subgrapher.snapshot.org/delegation",
+  "decimal_types": {
+    "BigIntVP": {
+      "p": 80,
+      "d": 0
+    },
+    "BigDecimalVP": {
+      "p": 80,
+      "d": 20
+    }
+  },
+  "optimistic_indexing": false,
+  "sources": []
+}

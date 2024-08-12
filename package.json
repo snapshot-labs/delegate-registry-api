@@ -1,0 +1,34 @@
+{
+  "name": "@snapshot-labs/checkpoint-template",
+  "version": "0.1.0",
+  "license": "MIT",
+  "description": "Checkpoint starter template",
+  "scripts": {
+    "codegen": "checkpoint generate",
+    "lint": "eslint src/ --ext .ts --fix",
+    "prebuild": "yarn codegen",
+    "build": "tsc",
+    "dev": "nodemon src/index.ts",
+    "start": "node dist/src/index.js"
+  },
+  "eslintConfig": {
+    "extends": "@snapshot-labs"
+  },
+  "prettier": "@snapshot-labs/prettier-config",
+  "dependencies": {
+    "@snapshot-labs/checkpoint": "^0.1.0-beta.39",
+    "@types/node": "^18.11.6",
+    "cors": "^2.8.5",
+    "dotenv": "^16.0.1",
+    "express": "^4.18.1",
+    "nodemon": "^2.0.19",
+    "ts-node": "^10.8.1",
+    "typescript": "^5.2.2"
+  },
+  "devDependencies": {
+    "@snapshot-labs/eslint-config": "^0.1.0-beta.18",
+    "@snapshot-labs/prettier-config": "^0.1.0-beta.18",
+    "eslint": "^8.53.0",
+    "prettier": "^3.1.0"
+  }
+}
