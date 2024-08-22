@@ -1,5 +1,4 @@
 import { formatUnits } from '@ethersproject/units';
-// @ts-ignore
 import { register } from '@snapshot-labs/checkpoint/dist/src/register';
 import snapshotjs from '@snapshot-labs/snapshot.js';
 import { Mutex } from 'async-mutex';
