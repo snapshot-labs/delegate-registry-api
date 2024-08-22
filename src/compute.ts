@@ -3,7 +3,7 @@ import { formatUnits } from '@ethersproject/units';
 import { register } from '@snapshot-labs/checkpoint/dist/src/register';
 import snapshotjs from '@snapshot-labs/snapshot.js';
 import { Mutex } from 'async-mutex';
-import { SCORE_API_URL } from './constants';
+import { COMPUTE_DELAY_SECONDS, SCORE_API_URL } from './constants';
 import { getSpace } from './hub';
 import { Delegate, Governance } from '../.checkpoint/models';
 
@@ -15,6 +15,7 @@ const DELEGATION_STRATEGIES = [
   'delegation-with-overrides'
 ];
 
+const lastCompute = new Map<string, number>();
 const mutex = new Mutex();
 
 // This function is called everytime governance information is queried from GraphQL API.
@@ -32,6 +33,14 @@ export async function compute(governances: string[]) {
 
     for (const governance of governances) {
       console.log('computing', governance);
+
+      const computedAt = lastCompute.get(governance) ?? 0;
+      const now = Math.floor(Date.now() / 1000);
+      if (now - computedAt < COMPUTE_DELAY_SECONDS) {
+        console.log('ignoring because of recent compute');
+        continue;
+      }
+      lastCompute.set(governance, now);
 
       const space = await getSpace(governance);
       const delegations = await snapshotjs.utils.getDelegatesBySpace(
