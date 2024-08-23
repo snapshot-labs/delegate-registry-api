@@ -15,7 +15,7 @@ export const SPACE_QUERY = gql`
   }
 `;
 
-type Space = {
+export type Space = {
   id: string;
   network: string;
   strategies: {

@@ -2,9 +2,18 @@ import { formatUnits } from '@ethersproject/units';
 import { register } from '@snapshot-labs/checkpoint/dist/src/register';
 import snapshotjs from '@snapshot-labs/snapshot.js';
 import { Mutex } from 'async-mutex';
-import { COMPUTE_DELAY_SECONDS, SCORE_API_URL } from './constants';
-import { getSpace } from './hub';
+import {
+  NETWORK_COMPUTE_DELAY_SECONDS,
+  SCORE_API_URL,
+  SPACE_COMPUTE_DELAY_SECONDS
+} from './constants';
+import { getSpace, Space } from './hub';
 import { Delegate, Governance } from '../.checkpoint/models';
+
+type NetworkCache = {
+  timestamp: number;
+  data: Awaited<ReturnType<typeof snapshotjs.utils.getDelegatesBySpace>>;
+};
 
 const DECIMALS = 18;
 const DELEGATION_STRATEGIES = [
@@ -14,8 +23,64 @@ const DELEGATION_STRATEGIES = [
   'delegation-with-overrides'
 ];
 
-const lastCompute = new Map<string, number>();
+const networkDelegationsCache = new Map<string, NetworkCache>();
+const lastSpaceCompute = new Map<string, number>();
 const mutex = new Mutex();
+
+async function getNetworkDelegations(network: string) {
+  const cache = networkDelegationsCache.get(network);
+  const now = Math.floor(Date.now() / 1000);
+
+  if (cache && now - cache.timestamp < NETWORK_COMPUTE_DELAY_SECONDS) {
+    return cache.data;
+  }
+
+  const delegations = await snapshotjs.utils.getDelegatesBySpace(
+    network,
+    null,
+    'latest'
+  );
+
+  networkDelegationsCache.set(network, {
+    timestamp: now,
+    data: delegations
+  });
+
+  return delegations;
+}
+
+async function getScores(
+  network: string,
+  governance: string,
+  strategies: Space['strategies'],
+  delegatesAddresses: string[]
+): Promise<Record<string, number>> {
+  const chunks = delegatesAddresses.reduce((acc, address, i) => {
+    const chunkIndex = Math.floor(i / 1000);
+    if (!acc[chunkIndex]) acc[chunkIndex] = [];
+    acc[chunkIndex].push(address);
+    return acc;
+  }, [] as string[][]);
+
+  let scores: Record<string, number> = {};
+  for (const chunk of chunks) {
+    const result = await snapshotjs.utils.getScores(
+      governance,
+      strategies,
+      network,
+      chunk,
+      'latest',
+      `${SCORE_API_URL}/api/scores`
+    );
+
+    scores = {
+      ...scores,
+      ...result[0]
+    };
+  }
+
+  return scores;
+}
 
 // This function is called everytime governance information is queried from GraphQL API.
 // It receives array of governances that we want to update information about.
@@ -33,20 +98,16 @@ export async function compute(governances: string[]) {
     for (const governance of governances) {
       console.log('computing', governance);
 
-      const computedAt = lastCompute.get(governance) ?? 0;
+      const computedAt = lastSpaceCompute.get(governance) ?? 0;
       const now = Math.floor(Date.now() / 1000);
-      if (now - computedAt < COMPUTE_DELAY_SECONDS) {
+      if (now - computedAt < SPACE_COMPUTE_DELAY_SECONDS) {
         console.log('ignoring because of recent compute');
         continue;
       }
-      lastCompute.set(governance, now);
+      lastSpaceCompute.set(governance, now);
 
       const space = await getSpace(governance);
-      const delegations = await snapshotjs.utils.getDelegatesBySpace(
-        space.network,
-        governance,
-        'latest'
-      );
+      const delegations = await getNetworkDelegations(space.network);
 
       const delegatorCounter = {};
       for (const delegation of delegations) {
@@ -67,19 +128,17 @@ export async function compute(governances: string[]) {
         DELEGATION_STRATEGIES.includes(strategy.name)
       );
 
-      const scores = await snapshotjs.utils.getScores(
+      const scores = await getScores(
+        space.network,
         governance,
         strategies,
-        space.network,
-        delegatesAddresses,
-        'latest',
-        `${SCORE_API_URL}/api/scores`
+        delegatesAddresses
       );
 
       const delegates = uniqueDelegates.map(delegate => ({
         ...delegate,
         score: BigInt(
-          Math.floor((scores[0][delegate.delegate] ?? 0) * 10 ** DECIMALS)
+          Math.floor((scores[delegate.delegate] ?? 0) * 10 ** DECIMALS)
         )
       }));
 
@@ -93,8 +152,8 @@ export async function compute(governances: string[]) {
       );
 
       const governanceEntity = new Governance(governance);
-      governanceEntity.currentDelegates = uniqueDelegates.length;
-      governanceEntity.totalDelegates = uniqueDelegates.length;
+      governanceEntity.currentDelegates = sortedDelegates.length;
+      governanceEntity.totalDelegates = sortedDelegates.length;
       governanceEntity.delegatedVotesRaw = totalVotes.toString();
       governanceEntity.delegatedVotes = formatUnits(totalVotes, DECIMALS);
       await governanceEntity.save();
