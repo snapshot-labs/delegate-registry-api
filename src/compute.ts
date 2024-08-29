@@ -151,7 +151,9 @@ export async function compute(governances: string[]) {
         0n
       );
 
-      const governanceEntity = new Governance(governance);
+      let governanceEntity = await Governance.loadEntity(governance);
+      if (!governanceEntity) governanceEntity = new Governance(governance);
+
       governanceEntity.currentDelegates = sortedDelegates.length;
       governanceEntity.totalDelegates = sortedDelegates.length;
       governanceEntity.delegatedVotesRaw = totalVotes.toString();
@@ -159,9 +161,10 @@ export async function compute(governances: string[]) {
       await governanceEntity.save();
 
       for (const delegate of sortedDelegates) {
-        const delegateEntity = new Delegate(
-          `${governance}/${delegate.delegate}`
-        );
+        const id = `${governance}/${delegate.delegate}`;
+        let delegateEntity = await Delegate.loadEntity(id);
+        if (!delegateEntity) delegateEntity = new Delegate(id);
+
         delegateEntity.governance = governance;
         delegateEntity.user = delegate.delegate;
         delegateEntity.delegatedVotesRaw = delegate.score.toString();
