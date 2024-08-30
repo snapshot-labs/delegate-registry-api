@@ -104,7 +104,6 @@ export async function compute(governances: string[]) {
         console.log('ignoring because of recent compute');
         continue;
       }
-      lastSpaceCompute.set(governance, now);
 
       const space = await getSpace(governance);
       const delegations = await getNetworkDelegations(space.network);
@@ -173,6 +172,8 @@ export async function compute(governances: string[]) {
           delegatorCounter[delegate.delegate];
         await delegateEntity.save();
       }
+
+      lastSpaceCompute.set(governance, now);
 
       console.log('finished compute', governance);
     }
