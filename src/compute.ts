@@ -56,7 +56,7 @@ async function getScores(
   delegatesAddresses: string[]
 ): Promise<Record<string, number>> {
   const chunks = delegatesAddresses.reduce((acc, address, i) => {
-    const chunkIndex = Math.floor(i / 1000);
+    const chunkIndex = Math.floor(i / 500);
     if (!acc[chunkIndex]) acc[chunkIndex] = [];
     acc[chunkIndex].push(address);
     return acc;
