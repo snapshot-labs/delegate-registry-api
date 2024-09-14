@@ -154,7 +154,7 @@ export async function compute(governances: string[]) {
       if (!governanceEntity) governanceEntity = new Governance(governance);
 
       governanceEntity.currentDelegates = sortedDelegates.length;
-      governanceEntity.totalDelegates = delegates.length;
+      governanceEntity.totalDelegates = delegations.length;
       governanceEntity.delegatedVotesRaw = totalVotes.toString();
       governanceEntity.delegatedVotes = formatUnits(totalVotes, DECIMALS);
       await governanceEntity.save();
