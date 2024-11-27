@@ -75,9 +75,16 @@ async function getScores(
       `${SCORE_API_URL}/api/scores`
     );
 
+    const totalScores = result.reduce((acc, scores) => {
+      for (const [delegate, score] of Object.entries(scores)) {
+        acc[delegate] = (acc[delegate] ?? 0) + score;
+      }
+      return acc;
+    }, {});
+
     scores = {
       ...scores,
-      ...result[0]
+      ...totalScores
     };
   }
 
