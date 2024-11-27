@@ -37,11 +37,17 @@ async function getNetworkDelegations(network: string) {
     return cache.data;
   }
 
-  const delegations = await snapshotjs.utils.getDelegatesBySpace(
+  const delegationsData = await snapshotjs.utils.getDelegatesBySpace(
     network,
     null,
     'latest'
   );
+
+  const delegations = delegationsData.map(delegation => ({
+    ...delegation,
+    delegate: snapshotjs.utils.getFormattedAddress(delegation.delegate, 'evm'),
+    delegator: snapshotjs.utils.getFormattedAddress(delegation.delegator, 'evm')
+  }));
 
   networkDelegationsCache.set(network, {
     timestamp: now,
