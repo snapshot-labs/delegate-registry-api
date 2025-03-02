@@ -1,7 +1,7 @@
 import { formatUnits } from '@ethersproject/units';
-import { register } from '@snapshot-labs/checkpoint/dist/src/register';
 import snapshotjs from '@snapshot-labs/snapshot.js';
 import { Mutex } from 'async-mutex';
+import { currentBlockTracker } from './checkpoint';
 import {
   NETWORK_COMPUTE_DELAY_SECONDS,
   SCORE_API_URL,
@@ -108,7 +108,7 @@ export async function compute(governances: string[]) {
   const release = await mutex.acquire();
 
   try {
-    register.setCurrentBlock(register.getCurrentBlock() + 1n);
+    await currentBlockTracker.increaseCurrentBlock();
 
     for (const governance of governances) {
       console.log('computing', governance);
