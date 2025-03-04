@@ -108,8 +108,6 @@ export async function compute(governances: string[]) {
   const release = await mutex.acquire();
 
   try {
-    await currentBlockTracker.increaseCurrentBlock();
-
     for (const governance of governances) {
       console.log('computing', governance);
 
@@ -119,7 +117,7 @@ export async function compute(governances: string[]) {
         console.log('ignoring because of recent compute');
         continue;
       }
-
+      await currentBlockTracker.increaseCurrentBlock();
       const space = await getSpace(governance);
       const delegations = await getNetworkDelegations(space.network);
 
