@@ -1,4 +1,5 @@
 import { formatUnits } from '@ethersproject/units';
+import { register } from '@snapshot-labs/checkpoint/dist/src/register';
 import snapshotjs from '@snapshot-labs/snapshot.js';
 import { Mutex } from 'async-mutex';
 import { currentBlockTracker } from './checkpoint';
@@ -117,7 +118,7 @@ export async function compute(governances: string[]) {
         console.log('ignoring because of recent compute');
         continue;
       }
-      await currentBlockTracker.increaseCurrentBlock();
+      const current = await currentBlockTracker.increaseCurrentBlock();
       const space = await getSpace(governance);
       const delegations = await getNetworkDelegations(space.network);
 
@@ -171,6 +172,16 @@ export async function compute(governances: string[]) {
       governanceEntity.delegatedVotesRaw = totalVotes.toString();
       governanceEntity.delegatedVotes = formatUnits(totalVotes, DECIMALS);
       await governanceEntity.save();
+
+      // NOTE: This needs to be verified in case we upgrade Checkpoint
+      const knex = register.getKnex();
+      await knex
+        .table(Delegate.tableName)
+        .andWhere('governance', governance)
+        .andWhereRaw('upper_inf(block_range)')
+        .update({
+          block_range: knex.raw('int8range(lower(block_range), ?)', [current])
+        });
 
       for (const delegate of sortedDelegates) {
         const id = `${governance}/${delegate.delegate}`;
