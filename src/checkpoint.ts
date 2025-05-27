@@ -54,6 +54,8 @@ function createCurrentBlockTracker() {
       })
       .onConflict('key')
       .merge();
+
+    return nextValue;
   };
 
   return { increaseCurrentBlock };
