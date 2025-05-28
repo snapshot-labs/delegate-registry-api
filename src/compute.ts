@@ -8,12 +8,27 @@ import {
   SCORE_API_URL,
   SPACE_COMPUTE_DELAY_SECONDS
 } from './constants';
+import {
+  getCustomGovernanceDelegations,
+  getOnchainScores
+} from './custom-governances';
 import { getSpace, Space } from './hub';
+import { CustomGovernance, DelegateItem } from './types';
 import { Delegate, Governance } from '../.checkpoint/models';
 
 type NetworkCache = {
   timestamp: number;
   data: Awaited<ReturnType<typeof snapshotjs.utils.getDelegatesBySpace>>;
+};
+
+const CUSTOM_GOVERNANCES: Record<string, CustomGovernance | undefined> = {
+  curtis: {
+    type: 'CUSTOM_GOVERNANCE',
+    network: '33111',
+    viewId: '',
+    subgraphUrl:
+      'https://api.goldsky.com/api/public/project_cmb7mtyozekvj01q7bo0bcirq/subgraphs/sekhmet-snapshot-subgraph-curtis/0.0.2/gn'
+  }
 };
 
 const DECIMALS = 18;
@@ -29,6 +44,23 @@ const DELEGATION_STRATEGIES = [
 const networkDelegationsCache = new Map<string, NetworkCache>();
 const lastSpaceCompute = new Map<string, number>();
 const mutex = new Mutex();
+
+function getDelegationSpace(id: string) {
+  if (id.includes(':')) {
+    const [networkId, viewId] = id.split(':');
+
+    if (CUSTOM_GOVERNANCES[networkId]) {
+      return {
+        ...CUSTOM_GOVERNANCES[networkId],
+        viewId
+      };
+    }
+
+    throw new Error(`Unknown custom governance ID: ${id}`);
+  }
+
+  return getSpace(id);
+}
 
 async function getNetworkDelegations(network: string) {
   const cache = networkDelegationsCache.get(network);
@@ -119,8 +151,12 @@ export async function compute(governances: string[]) {
         continue;
       }
       const current = await currentBlockTracker.increaseCurrentBlock();
-      const space = await getSpace(governance);
-      const delegations = await getNetworkDelegations(space.network);
+      const space = await getDelegationSpace(governance);
+      const isCustomGovernance = 'type' in space;
+
+      const delegations = isCustomGovernance
+        ? await getCustomGovernanceDelegations(space)
+        : await getNetworkDelegations(space.network);
 
       const delegatorCounter = {};
       for (const delegation of delegations) {
@@ -137,23 +173,33 @@ export async function compute(governances: string[]) {
       const delegatesAddresses = Object.keys(delegationsMap);
       const uniqueDelegates = Object.values(delegationsMap);
 
-      const strategies = space.strategies.filter(strategy =>
-        DELEGATION_STRATEGIES.includes(strategy.name)
-      );
+      let delegates: DelegateItem[] = [];
+      if (isCustomGovernance) {
+        const scores = await getOnchainScores(space.network, delegations);
 
-      const scores = await getScores(
-        space.network,
-        governance,
-        strategies,
-        delegatesAddresses
-      );
+        delegates = uniqueDelegates.map(delegate => ({
+          ...delegate,
+          score: scores[delegate.delegate] ?? 0n
+        }));
+      } else {
+        const strategies = space.strategies.filter(strategy =>
+          DELEGATION_STRATEGIES.includes(strategy.name)
+        );
 
-      const delegates = uniqueDelegates.map(delegate => ({
-        ...delegate,
-        score: BigInt(
-          Math.floor((scores[delegate.delegate] ?? 0) * 10 ** DECIMALS)
-        )
-      }));
+        const scores = await getScores(
+          space.network,
+          governance,
+          strategies,
+          delegatesAddresses
+        );
+
+        delegates = uniqueDelegates.map(delegate => ({
+          ...delegate,
+          score: BigInt(
+            Math.floor((scores[delegate.delegate] ?? 0) * 10 ** DECIMALS)
+          )
+        }));
+      }
 
       const sortedDelegates = delegates
         .filter(delegate => delegate.score > 0n)
