@@ -1,7 +1,20 @@
+import { Interface } from '@ethersproject/abi';
+import { Contract } from '@ethersproject/contracts';
 import { StaticJsonRpcProvider } from '@ethersproject/providers';
 import snapshotjs from '@snapshot-labs/snapshot.js';
 import { CustomGovernance, Delegation } from './types';
 
+const MULTICALL3_ABI = [
+  'function aggregate3(tuple(address target, bool allowFailure, bytes callData)[] calls) view returns (tuple(bool success, bytes returnData)[] returnData)',
+  'function getEthBalance(address addr) view returns (uint256 balance)'
+];
+
+const DELEGATE_REGISTRY_ABI = [
+  'function delegation(address delegator, bytes32 id) view returns (address delegate)',
+  'function getDelegators(address delegate, bytes32 id) view returns (address[])'
+];
+
+const MULTICALL3_ADDRESS = '0xcA11bde05977b3631167028862bE2a173976CA11';
 const PAGE_SIZE = 1000;
 
 function getProvider(chainId: string) {
@@ -11,24 +24,86 @@ function getProvider(chainId: string) {
   );
 }
 
-export async function getOnchainScores(
-  chainId: string,
-  delegations: Delegation[]
-) {
-  const provider = getProvider(chainId);
+export async function getOnchainScores({
+  space,
+  delegations
+}: {
+  space: CustomGovernance;
+  delegations: Delegation[];
+}) {
+  const provider = getProvider(space.network);
+
+  const delegateRegistryInterface = new Interface(DELEGATE_REGISTRY_ABI);
+  const multicall = new Contract(MULTICALL3_ADDRESS, MULTICALL3_ABI, provider);
 
   const scores: Record<string, bigint> = {};
+
+  // Delegatee's VP is equals to VP they get from delegations
+  // Plus their own VP unless they delegate to someone else.
+  const delegateeAddresses = Array.from(
+    new Set<string>(delegations.map(delegation => delegation.delegate))
+  );
+  const allAddresses = Array.from(
+    new Set<string>(
+      delegations.flatMap(delegation => [
+        delegation.delegator,
+        delegation.delegate
+      ])
+    )
+  );
+
+  const calls = [
+    ...delegateeAddresses.map(delegatee => ({
+      target: space.delegationRegistry,
+      allowFailure: false,
+      callData: delegateRegistryInterface.encodeFunctionData('delegation', [
+        delegatee,
+        space.viewId
+      ])
+    })),
+    ...allAddresses.map(address => ({
+      target: MULTICALL3_ADDRESS,
+      allowFailure: false,
+      callData: multicall.interface.encodeFunctionData('getEthBalance', [
+        address
+      ])
+    }))
+  ];
+
+  const results: {
+    returnData: string;
+  }[] = await multicall.aggregate3(calls);
+
+  const delegateeDelegationsMap = new Map(
+    results
+      .slice(0, delegateeAddresses.length)
+      .map((result, index) => [
+        delegateeAddresses[index],
+        delegateRegistryInterface.decodeFunctionResult(
+          'delegation',
+          result.returnData
+        )[0]
+      ])
+  );
+
+  const balancesMap = new Map(
+    results
+      .slice(delegateeAddresses.length)
+      .map((result, index) => [allAddresses[index], BigInt(result.returnData)])
+  );
 
   for (const delegation of delegations) {
     const { delegator, delegate } = delegation;
 
     if (!scores[delegate]) {
-      const balance = await provider.getBalance(delegate);
-      scores[delegate] = balance.toBigInt();
+      scores[delegate] =
+        delegateeDelegationsMap.get(delegate) ===
+        '0x0000000000000000000000000000000000000000'
+          ? (balancesMap.get(delegate) ?? 0n)
+          : 0n;
     }
 
-    const balance = await provider.getBalance(delegator);
-    scores[delegate] += balance.toBigInt();
+    scores[delegate] += balancesMap.get(delegator) ?? 0n;
   }
 
   return scores;

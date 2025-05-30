@@ -17,6 +17,8 @@
   "prettier": "@snapshot-labs/prettier-config",
   "dependencies": {
     "@apollo/client": "^3.11.4",
+    "@ethersproject/abi": "^5.8.0",
+    "@ethersproject/contracts": "^5.8.0",
     "@ethersproject/providers": "^5.8.0",
     "@ethersproject/strings": "^5.8.0",
     "@ethersproject/units": "^5.7.0",

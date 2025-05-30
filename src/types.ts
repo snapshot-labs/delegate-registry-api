@@ -10,5 +10,6 @@ export type CustomGovernance = {
   type: 'CUSTOM_GOVERNANCE';
   network: string;
   viewId: string;
+  delegationRegistry: string;
   subgraphUrl: string;
 };
