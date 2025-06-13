@@ -22,13 +22,21 @@ type NetworkCache = {
 };
 
 const CUSTOM_GOVERNANCES: Record<string, CustomGovernance | undefined> = {
+  apechain: {
+    type: 'CUSTOM_GOVERNANCE',
+    network: '33139',
+    viewId: '',
+    delegationRegistry: '0x2f9e24e272d343c1f833ee7f3c6d6abc689b0102',
+    subgraphUrl:
+      'https://api.goldsky.com/api/public/project_cmb7myliieemg01v8928cd8rs/subgraphs/snapshot-apechain/0.0.1/gn'
+  },
   curtis: {
     type: 'CUSTOM_GOVERNANCE',
     network: '33111',
     viewId: '',
     delegationRegistry: '0xdd6b74123b2ab93ad701320d3f8d1b92b4fa5202',
     subgraphUrl:
-      'https://api.goldsky.com/api/public/project_cmb7mtyozekvj01q7bo0bcirq/subgraphs/sekhmet-snapshot-subgraph-curtis/0.0.2/gn'
+      'https://api.goldsky.com/api/public/project_cmb7myliieemg01v8928cd8rs/subgraphs/snapshot-curtis/0.0.1/gn'
   }
 };
 
