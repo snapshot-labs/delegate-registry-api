@@ -71,8 +71,8 @@ function getDelegationSpace(id: string) {
   return getSpace(id);
 }
 
-async function getNetworkDelegations(network: string, governance: string) {
-  const cache = networkDelegationsCache.get(network);
+async function fetchCachedDelegations(space: Space) {
+  const cache = networkDelegationsCache.get(space.network);
   const now = Math.floor(Date.now() / 1000);
 
   if (cache && now - cache.timestamp < NETWORK_COMPUTE_DELAY_SECONDS) {
@@ -80,8 +80,8 @@ async function getNetworkDelegations(network: string, governance: string) {
   }
 
   const delegationsData = await snapshotjs.utils.getDelegatesBySpace(
-    network,
-    governance,
+    space.network,
+    space.id,
     'latest'
   );
 
@@ -91,7 +91,7 @@ async function getNetworkDelegations(network: string, governance: string) {
     delegator: snapshotjs.utils.getFormattedAddress(delegation.delegator, 'evm')
   }));
 
-  networkDelegationsCache.set(network, {
+  networkDelegationsCache.set(space.network, {
     timestamp: now,
     data: delegations
   });
@@ -165,7 +165,7 @@ export async function compute(governances: string[]) {
 
       const delegations = isCustomGovernance
         ? await getCustomGovernanceDelegations(space)
-        : await getNetworkDelegations(space.network, governance);
+        : await fetchCachedDelegations(space);
 
       const delegatorCounter = {};
       for (const delegation of delegations) {
