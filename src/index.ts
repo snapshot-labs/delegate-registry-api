@@ -17,5 +17,5 @@ app.use(cors({ maxAge: 86400 }));
 app.use(middleware);
 app.use('/', checkpoint.graphql);
 
-const PORT = process.env.PORT || 3000;
+const PORT = process.env.PORT ?? 3000;
 app.listen(PORT, () => console.log(`Listening at http://localhost:${PORT}`));
