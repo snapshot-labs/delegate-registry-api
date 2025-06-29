@@ -163,9 +163,13 @@ export async function compute(governances: string[]) {
       const space = await getDelegationSpace(governance);
       const isCustomGovernance = 'type' in space;
 
-      const delegations = isCustomGovernance
+      const allDelegations = isCustomGovernance
         ? await getCustomGovernanceDelegations(space)
         : await getNetworkDelegations(space.network);
+
+      const delegations = allDelegations.filter(delegation =>
+        ['', governance].includes(delegation.space)
+      );
 
       const delegatorCounter = {};
       for (const delegation of delegations) {
