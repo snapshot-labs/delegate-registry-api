@@ -71,32 +71,53 @@ function getDelegationSpace(id: string) {
   return getSpace(id);
 }
 
-async function getNetworkDelegations(network: string) {
-  const cache = networkDelegationsCache.get(network);
-  const now = Math.floor(Date.now() / 1000);
-
-  if (cache && now - cache.timestamp < NETWORK_COMPUTE_DELAY_SECONDS) {
-    return cache.data;
-  }
-
-  const delegationsData = await snapshotjs.utils.getDelegatesBySpace(
-    network,
-    null,
-    'latest'
+async function getDelegationsForNetworks(space: Space) {
+  const delegationNetworks = Array.from(
+    new Set([
+      space.network,
+      ...(space.strategies.map(
+        s => s.params.delegationNetwork ?? s.network ?? space.network
+      ) ?? [])
+    ])
   );
 
-  const delegations = delegationsData.map(delegation => ({
-    ...delegation,
-    delegate: snapshotjs.utils.getFormattedAddress(delegation.delegate, 'evm'),
-    delegator: snapshotjs.utils.getFormattedAddress(delegation.delegator, 'evm')
-  }));
+  const now = Math.floor(Date.now() / 1000);
+  let allDelegations: any[] = [];
 
-  networkDelegationsCache.set(network, {
-    timestamp: now,
-    data: delegations
-  });
+  for (const network of delegationNetworks) {
+    const cache = networkDelegationsCache.get(network);
+    if (cache && now - cache.timestamp < NETWORK_COMPUTE_DELAY_SECONDS) {
+      allDelegations = allDelegations.concat(cache.data);
+      continue;
+    }
 
-  return delegations;
+    const delegationsData = await snapshotjs.utils.getDelegatesBySpace(
+      network,
+      null,
+      'latest'
+    );
+
+    const delegations = delegationsData.map(delegation => ({
+      ...delegation,
+      delegate: snapshotjs.utils.getFormattedAddress(
+        delegation.delegate,
+        'evm'
+      ),
+      delegator: snapshotjs.utils.getFormattedAddress(
+        delegation.delegator,
+        'evm'
+      )
+    }));
+
+    networkDelegationsCache.set(network, {
+      timestamp: now,
+      data: delegations
+    });
+
+    allDelegations = allDelegations.concat(delegations);
+  }
+
+  return allDelegations;
 }
 
 async function getScores(
@@ -163,9 +184,13 @@ export async function compute(governances: string[]) {
       const space = await getDelegationSpace(governance);
       const isCustomGovernance = 'type' in space;
 
-      const delegations = isCustomGovernance
+      const allDelegations = isCustomGovernance
         ? await getCustomGovernanceDelegations(space)
-        : await getNetworkDelegations(space.network);
+        : await getDelegationsForNetworks(space);
+
+      const delegations = allDelegations.filter(delegation =>
+        ['', governance].includes(delegation.space)
+      );
 
       const delegatorCounter = {};
       for (const delegation of delegations) {
@@ -189,7 +214,7 @@ export async function compute(governances: string[]) {
           delegations
         });
 
-        delegates = uniqueDelegates.map(delegate => ({
+        delegates = uniqueDelegates.map((delegate: any) => ({
           ...delegate,
           score: scores[delegate.delegate] ?? 0n
         }));
@@ -205,7 +230,7 @@ export async function compute(governances: string[]) {
           delegatesAddresses
         );
 
-        delegates = uniqueDelegates.map(delegate => ({
+        delegates = uniqueDelegates.map((delegate: any) => ({
           ...delegate,
           score: BigInt(
             Math.floor((scores[delegate.delegate] ?? 0) * 10 ** DECIMALS)
