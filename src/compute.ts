@@ -82,7 +82,7 @@ async function getDelegationsForNetworks(space: Space) {
   );
 
   const now = Math.floor(Date.now() / 1000);
-  let allDelegations: any[] = [];
+  let allDelegations: Delegation[] = [];
 
   for (const network of delegationNetworks) {
     const cache = networkDelegationsCache.get(network);
