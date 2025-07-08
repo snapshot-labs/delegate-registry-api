@@ -13,7 +13,7 @@ import {
   getOnchainScores
 } from './custom-governances';
 import { getSpace, Space } from './hub';
-import { CustomGovernance, DelegateItem } from './types';
+import { CustomGovernance, DelegateItem, Delegation } from './types';
 import { Delegate, Governance } from '../.checkpoint/models';
 
 type NetworkCache = {
@@ -214,7 +214,7 @@ export async function compute(governances: string[]) {
           delegations
         });
 
-        delegates = uniqueDelegates.map((delegate: any) => ({
+        delegates = uniqueDelegates.map(delegate => ({
           ...delegate,
           score: scores[delegate.delegate] ?? 0n
         }));
@@ -230,7 +230,7 @@ export async function compute(governances: string[]) {
           delegatesAddresses
         );
 
-        delegates = uniqueDelegates.map((delegate: any) => ({
+        delegates = uniqueDelegates.map(delegate => ({
           ...delegate,
           score: BigInt(
             Math.floor((scores[delegate.delegate] ?? 0) * 10 ** DECIMALS)
