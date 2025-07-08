@@ -16,6 +16,8 @@ const checkpoint = new Checkpoint(config, indexer, schema, {
 });
 
 async function setupStorageTable() {
+  await checkpoint.reset();
+
   const { knex } = checkpoint.getBaseContext();
   console.log('checking for storage table');
 
