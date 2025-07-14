@@ -72,13 +72,19 @@ function getDelegationSpace(id: string) {
 }
 
 async function getDelegationsForNetworks(space: Space) {
+  const strategies = space.strategies.filter(strategy =>
+    DELEGATION_STRATEGIES.includes(strategy.name)
+  );
+
   const delegationNetworks = Array.from(
-    new Set([
-      space.network,
-      ...(space.strategies.map(
-        s => s.params.delegationNetwork ?? s.network ?? space.network
-      ) ?? [])
-    ])
+    new Set(
+      strategies.map(
+        strategy =>
+          strategy.params?.delegationNetwork ??
+          strategy.network ??
+          space.network
+      )
+    )
   );
 
   const now = Math.floor(Date.now() / 1000);
