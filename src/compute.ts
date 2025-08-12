@@ -47,7 +47,8 @@ const DELEGATION_STRATEGIES = [
   'delegation-with-cap',
   'delegation-with-overrides',
   'with-delegation',
-  'erc20-balance-of-with-delegation'
+  'erc20-balance-of-with-delegation',
+  'spark-with-delegation'
 ];
 
 const networkDelegationsCache = new Map<string, NetworkCache>();
