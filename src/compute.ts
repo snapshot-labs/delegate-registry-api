@@ -56,6 +56,47 @@ const networkDelegationsCache = new Map<string, NetworkCache>();
 const lastSpaceCompute = new Map<string, number>();
 const mutex = new Mutex();
 
+function filterDelegationsByWhitelist(
+  delegations: Delegation[],
+  whitelistedAddresses: string[],
+  governance: string
+): Delegation[] {
+  if (whitelistedAddresses.length === 0) {
+    return delegations;
+  }
+
+  const delegationsOfWhitelist = delegations.filter(delegation =>
+    whitelistedAddresses.includes(delegation.delegate)
+  );
+
+  const existingAddresses = new Set(
+    delegationsOfWhitelist.map(d => d.delegate)
+  );
+
+  const newDelegations = whitelistedAddresses
+    .filter(address => !existingAddresses.has(address))
+    .map(address => ({
+      delegate: address,
+      delegator: '',
+      space: governance,
+      timestamp: 0,
+      score: 0n
+    }));
+
+  return [...delegationsOfWhitelist, ...newDelegations];
+}
+
+function getWhitelistedAddresses(space: Space): string[] {
+  return space.strategies
+    .filter(
+      strategy =>
+        WHITELIST_DELEGATES_STRATEGIES.includes(strategy.name) &&
+        strategy.params?.whitelistedDelegates?.length > 0
+    )
+    .flatMap(strategy => strategy.params.whitelistedDelegates)
+    .map(address => snapshotjs.utils.getFormattedAddress(address, 'evm'));
+}
+
 function getDelegationSpace(id: string) {
   if (id.includes(':')) {
     const [networkId, viewId] = id.split(':');
@@ -192,33 +233,26 @@ export async function compute(governances: string[]) {
       const space = await getDelegationSpace(governance);
       const isCustomGovernance = 'type' in space;
 
-      let allDelegations = isCustomGovernance
+      const allDelegations = isCustomGovernance
         ? await getCustomGovernanceDelegations(space)
         : await getDelegationsForNetworks(space);
 
-      let whitelistedAddresses = isCustomGovernance
-        ? []
-        : space.strategies
-            .filter(
-              strategy =>
-                WHITELIST_DELEGATES_STRATEGIES.includes(strategy.name) &&
-                strategy.params?.whitelistedDelegates?.length > 0
-            )
-            .flatMap(strategy => strategy.params.whitelistedDelegates)
-            .map(address =>
-              snapshotjs.utils.getFormattedAddress(address, 'evm')
-            );
-
-      if (whitelistedAddresses.length) {
-        whitelistedAddresses = [...new Set(whitelistedAddresses)];
-        allDelegations = allDelegations.filter(delegation =>
-          whitelistedAddresses.includes(delegation.delegate)
-        );
-      }
-
-      const delegations = allDelegations.filter(delegation =>
+      let delegations = allDelegations.filter(delegation =>
         ['', governance].includes(delegation.space)
       );
+
+      const whitelistedAddresses = isCustomGovernance
+        ? []
+        : getWhitelistedAddresses(space);
+
+      if (whitelistedAddresses.length > 0) {
+        // filter and add delegations with whitelisted addresses
+        delegations = filterDelegationsByWhitelist(
+          delegations,
+          whitelistedAddresses,
+          governance
+        );
+      }
 
       const delegatorCounter = {};
       for (const delegation of delegations) {
@@ -226,7 +260,7 @@ export async function compute(governances: string[]) {
           delegatorCounter[delegation.delegate] = 0;
         }
 
-        delegatorCounter[delegation.delegate] += 1;
+        delegatorCounter[delegation.delegate] += delegation.delegator ? 1 : 0;
       }
 
       const delegationsMap = Object.fromEntries(
@@ -266,32 +300,29 @@ export async function compute(governances: string[]) {
         }));
       }
 
-      // Keep addresses with non-zero scores and
-      // Add missing whitelisted delegates with zero scores and sort
-      const existingDelegates = new Set(delegates.map(d => d.delegate));
-      const sortedDelegates = [
-        ...delegates.filter(delegate => delegate.score > 0n),
-        ...whitelistedAddresses
-          .filter(address => !existingDelegates.has(address))
-          .map(address => ({
-            delegate: address,
-            delegator: '',
-            space: governance,
-            timestamp: 0,
-            score: 0n
-          }))
-      ].sort((a, b) => (b.score > a.score ? 1 : -1));
+      // keep the whitelisted addresses even if they have no voting power
+      const sortedDelegates = delegates
+        .filter(
+          delegate =>
+            delegate.score > 0n ||
+            whitelistedAddresses.includes(delegate.delegate)
+        )
+        .sort((a, b) => (b.score > a.score ? 1 : -1));
 
       const totalVotes = sortedDelegates.reduce(
         (acc, delegate) => acc + delegate.score,
         0n
       );
 
+      const totalDelegates: number = (
+        Object.values(delegatorCounter) as number[]
+      ).reduce((acc: number, count: number) => acc + count, 0);
+
       let governanceEntity = await Governance.loadEntity(governance);
       if (!governanceEntity) governanceEntity = new Governance(governance);
 
       governanceEntity.currentDelegates = sortedDelegates.length;
-      governanceEntity.totalDelegates = delegations.length;
+      governanceEntity.totalDelegates = totalDelegates;
       governanceEntity.delegatedVotesRaw = totalVotes.toString();
       governanceEntity.delegatedVotes = formatUnits(totalVotes, DECIMALS);
       await governanceEntity.save();
