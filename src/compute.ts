@@ -93,7 +93,7 @@ function getWhitelistedAddresses(space: Space): string[] {
         WHITELIST_DELEGATES_STRATEGIES.includes(strategy.name) &&
         strategy.params?.whitelistedDelegates?.length > 0
     )
-    .flatMap(strategy => strategy.params.whitelistedDelegates)
+    .flatMap(strategy => strategy.params?.whitelistedDelegates ?? [])
     .map(address => snapshotjs.utils.getFormattedAddress(address, 'evm'));
 }
 
