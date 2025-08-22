@@ -50,6 +50,7 @@ const DELEGATION_STRATEGIES = [
   'erc20-balance-of-with-delegation',
   'spark-with-delegation'
 ];
+const WHITELIST_DELEGATES_STRATEGIES = ['spark-with-delegation'];
 
 const networkDelegationsCache = new Map<string, NetworkCache>();
 const lastSpaceCompute = new Map<string, number>();
@@ -191,9 +192,29 @@ export async function compute(governances: string[]) {
       const space = await getDelegationSpace(governance);
       const isCustomGovernance = 'type' in space;
 
-      const allDelegations = isCustomGovernance
+      let allDelegations = isCustomGovernance
         ? await getCustomGovernanceDelegations(space)
         : await getDelegationsForNetworks(space);
+
+      let whitelistedAddresses = isCustomGovernance
+        ? []
+        : space.strategies
+            .filter(
+              strategy =>
+                WHITELIST_DELEGATES_STRATEGIES.includes(strategy.name) &&
+                strategy.params?.whitelistedDelegates?.length > 0
+            )
+            .flatMap(strategy => strategy.params.whitelistedDelegates)
+            .map(address =>
+              snapshotjs.utils.getFormattedAddress(address, 'evm')
+            );
+
+      if (whitelistedAddresses.length) {
+        whitelistedAddresses = [...new Set(whitelistedAddresses)];
+        allDelegations = allDelegations.filter(delegation =>
+          whitelistedAddresses.includes(delegation.delegate)
+        );
+      }
 
       const delegations = allDelegations.filter(delegation =>
         ['', governance].includes(delegation.space)
@@ -245,9 +266,21 @@ export async function compute(governances: string[]) {
         }));
       }
 
-      const sortedDelegates = delegates
-        .filter(delegate => delegate.score > 0n)
-        .sort((a, b) => (b.score > a.score ? 1 : -1));
+      // Keep addresses with non-zero scores and
+      // Add missing whitelisted delegates with zero scores and sort
+      const existingDelegates = new Set(delegates.map(d => d.delegate));
+      const sortedDelegates = [
+        ...delegates.filter(delegate => delegate.score > 0n),
+        ...whitelistedAddresses
+          .filter(address => !existingDelegates.has(address))
+          .map(address => ({
+            delegate: address,
+            delegator: '',
+            space: governance,
+            timestamp: 0,
+            score: 0n
+          }))
+      ].sort((a, b) => (b.score > a.score ? 1 : -1));
 
       const totalVotes = sortedDelegates.reduce(
         (acc, delegate) => acc + delegate.score,
@@ -283,7 +316,7 @@ export async function compute(governances: string[]) {
         delegateEntity.delegatedVotesRaw = delegate.score.toString();
         delegateEntity.delegatedVotes = formatUnits(delegate.score, DECIMALS);
         delegateEntity.tokenHoldersRepresentedAmount =
-          delegatorCounter[delegate.delegate];
+          delegatorCounter[delegate.delegate] || 0;
         await delegateEntity.save();
       }
 
