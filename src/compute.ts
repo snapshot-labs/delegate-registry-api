@@ -50,10 +50,52 @@ const DELEGATION_STRATEGIES = [
   'erc20-balance-of-with-delegation',
   'spark-with-delegation'
 ];
+const WHITELIST_DELEGATES_STRATEGIES = ['spark-with-delegation'];
 
 const networkDelegationsCache = new Map<string, NetworkCache>();
 const lastSpaceCompute = new Map<string, number>();
 const mutex = new Mutex();
+
+function filterDelegationsByWhitelist(
+  delegations: Delegation[],
+  whitelistedAddresses: string[],
+  governance: string
+): Delegation[] {
+  if (whitelistedAddresses.length === 0) {
+    return delegations;
+  }
+
+  const delegationsOfWhitelist = delegations.filter(delegation =>
+    whitelistedAddresses.includes(delegation.delegate)
+  );
+
+  const existingAddresses = new Set(
+    delegationsOfWhitelist.map(d => d.delegate)
+  );
+
+  const newDelegations = whitelistedAddresses
+    .filter(address => !existingAddresses.has(address))
+    .map(address => ({
+      delegate: address,
+      delegator: '',
+      space: governance,
+      timestamp: 0,
+      score: 0n
+    }));
+
+  return [...delegationsOfWhitelist, ...newDelegations];
+}
+
+function getWhitelistedAddresses(space: Space): string[] {
+  return space.strategies
+    .filter(
+      strategy =>
+        WHITELIST_DELEGATES_STRATEGIES.includes(strategy.name) &&
+        strategy.params?.whitelistedDelegates?.length > 0
+    )
+    .flatMap(strategy => strategy.params?.whitelistedDelegates ?? [])
+    .map(address => snapshotjs.utils.getFormattedAddress(address, 'evm'));
+}
 
 function getDelegationSpace(id: string) {
   if (id.includes(':')) {
@@ -195,9 +237,22 @@ export async function compute(governances: string[]) {
         ? await getCustomGovernanceDelegations(space)
         : await getDelegationsForNetworks(space);
 
-      const delegations = allDelegations.filter(delegation =>
+      let delegations = allDelegations.filter(delegation =>
         ['', governance].includes(delegation.space)
       );
+
+      const whitelistedAddresses = isCustomGovernance
+        ? []
+        : getWhitelistedAddresses(space);
+
+      if (whitelistedAddresses.length > 0) {
+        // filter and add delegations with whitelisted addresses
+        delegations = filterDelegationsByWhitelist(
+          delegations,
+          whitelistedAddresses,
+          governance
+        );
+      }
 
       const delegatorCounter = {};
       for (const delegation of delegations) {
@@ -205,7 +260,7 @@ export async function compute(governances: string[]) {
           delegatorCounter[delegation.delegate] = 0;
         }
 
-        delegatorCounter[delegation.delegate] += 1;
+        delegatorCounter[delegation.delegate] += delegation.delegator ? 1 : 0;
       }
 
       const delegationsMap = Object.fromEntries(
@@ -245,8 +300,13 @@ export async function compute(governances: string[]) {
         }));
       }
 
+      // keep the whitelisted addresses even if they have no voting power
       const sortedDelegates = delegates
-        .filter(delegate => delegate.score > 0n)
+        .filter(
+          delegate =>
+            delegate.score > 0n ||
+            whitelistedAddresses.includes(delegate.delegate)
+        )
         .sort((a, b) => (b.score > a.score ? 1 : -1));
 
       const totalVotes = sortedDelegates.reduce(
@@ -254,11 +314,15 @@ export async function compute(governances: string[]) {
         0n
       );
 
+      const totalDelegates: number = (
+        Object.values(delegatorCounter) as number[]
+      ).reduce((acc: number, count: number) => acc + count, 0);
+
       let governanceEntity = await Governance.loadEntity(governance);
       if (!governanceEntity) governanceEntity = new Governance(governance);
 
       governanceEntity.currentDelegates = sortedDelegates.length;
-      governanceEntity.totalDelegates = delegations.length;
+      governanceEntity.totalDelegates = totalDelegates;
       governanceEntity.delegatedVotesRaw = totalVotes.toString();
       governanceEntity.delegatedVotes = formatUnits(totalVotes, DECIMALS);
       await governanceEntity.save();
@@ -283,7 +347,7 @@ export async function compute(governances: string[]) {
         delegateEntity.delegatedVotesRaw = delegate.score.toString();
         delegateEntity.delegatedVotes = formatUnits(delegate.score, DECIMALS);
         delegateEntity.tokenHoldersRepresentedAmount =
-          delegatorCounter[delegate.delegate];
+          delegatorCounter[delegate.delegate] || 0;
         await delegateEntity.save();
       }
 
