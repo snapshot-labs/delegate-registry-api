@@ -27,7 +27,12 @@ export type Space = {
 
 const client = new ApolloClient({
   uri: `${HUB_URL}/graphql`,
-  cache: new InMemoryCache()
+  cache: new InMemoryCache(),
+  defaultOptions: {
+    query: {
+      fetchPolicy: 'no-cache'
+    }
+  }
 });
 
 export async function getSpace(space: string): Promise<Space> {
