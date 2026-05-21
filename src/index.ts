@@ -1,7 +1,7 @@
 import 'dotenv/config';
 import cors from 'cors';
 import express from 'express';
-import { checkpoint, setupStorageTable } from './checkpoint';
+import { checkpoint, ensureIndexes, setupStorageTable } from './checkpoint';
 import { middleware } from './middleware';
 
 if (process.env.CA_CERT) {
@@ -9,6 +9,7 @@ if (process.env.CA_CERT) {
 }
 
 setupStorageTable();
+ensureIndexes();
 
 const app = express();
 app.use(express.json({ limit: '4mb' }));

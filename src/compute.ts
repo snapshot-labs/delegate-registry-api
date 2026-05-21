@@ -351,6 +351,15 @@ export async function compute(governances: string[]) {
         await delegateEntity.save();
       }
 
+      // The API only ever reads current rows (upper_inf(block_range)), but each
+      // compute closes the previous versions and inserts new ones. Drop the now
+      // closed versions so the table doesn't accumulate unbounded dead rows.
+      await knex
+        .table(Delegate.tableName)
+        .where('governance', governance)
+        .andWhereRaw('not upper_inf(block_range)')
+        .del();
+
       lastSpaceCompute.set(governance, now);
 
       console.log('finished compute', governance);
