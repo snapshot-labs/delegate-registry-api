@@ -30,6 +30,25 @@ async function setupStorageTable() {
     console.log('Storage table already exists');
   }
 }
+
+// Checkpoint only indexes individual scalar columns; nothing covers the
+// `upper_inf(block_range)` "current row" filter. Each hourly compute closes the
+// previous row versions and inserts new ones, so the (global) delegatedVotes
+// index fills with closed rows from every governance. Ordered delegate queries
+// then scan past those millions of dead entries and time out. This partial
+// index holds only live rows, pre-sorted for the default delegate ordering, so
+// queries never touch the bloated full-column index.
+async function ensureIndexes() {
+  const { knex } = checkpoint.getBaseContext();
+
+  if (!(await knex.schema.hasTable('delegates'))) return;
+
+  await knex.raw(
+    `CREATE INDEX IF NOT EXISTS delegates_live_gov_votes
+     ON delegates (governance, "delegatedVotes" DESC)
+     WHERE upper_inf(block_range)`
+  );
+}
 function createCurrentBlockTracker() {
   const knex = register.getKnex();
   let initialized = false;
@@ -63,4 +82,4 @@ function createCurrentBlockTracker() {
 
 const currentBlockTracker = createCurrentBlockTracker();
 
-export { checkpoint, setupStorageTable, currentBlockTracker };
+export { checkpoint, setupStorageTable, ensureIndexes, currentBlockTracker };
