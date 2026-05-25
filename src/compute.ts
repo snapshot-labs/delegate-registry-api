@@ -4,6 +4,7 @@ import snapshotjs from '@snapshot-labs/snapshot.js';
 import { Mutex } from 'async-mutex';
 import { currentBlockTracker } from './checkpoint';
 import {
+  INDEXER_NAME,
   NETWORK_COMPUTE_DELAY_SECONDS,
   SCORE_API_URL,
   SPACE_COMPUTE_DELAY_SECONDS
@@ -318,8 +319,13 @@ export async function compute(governances: string[]) {
         Object.values(delegatorCounter) as number[]
       ).reduce((acc: number, count: number) => acc + count, 0);
 
-      let governanceEntity = await Governance.loadEntity(governance);
-      if (!governanceEntity) governanceEntity = new Governance(governance);
+      let governanceEntity = await Governance.loadEntity(
+        governance,
+        INDEXER_NAME
+      );
+      if (!governanceEntity) {
+        governanceEntity = new Governance(governance, INDEXER_NAME);
+      }
 
       governanceEntity.currentDelegates = sortedDelegates.length;
       governanceEntity.totalDelegates = totalDelegates;
@@ -339,8 +345,8 @@ export async function compute(governances: string[]) {
 
       for (const delegate of sortedDelegates) {
         const id = `${governance}/${delegate.delegate}`;
-        let delegateEntity = await Delegate.loadEntity(id);
-        if (!delegateEntity) delegateEntity = new Delegate(id);
+        let delegateEntity = await Delegate.loadEntity(id, INDEXER_NAME);
+        if (!delegateEntity) delegateEntity = new Delegate(id, INDEXER_NAME);
 
         delegateEntity.governance = governance;
         delegateEntity.user = delegate.delegate;
