@@ -3,6 +3,7 @@ import path from 'path';
 import Checkpoint, { LogLevel } from '@snapshot-labs/checkpoint';
 import { register } from '@snapshot-labs/checkpoint/dist/src/register';
 import config from './config.json';
+import { INDEXER_NAME } from './constants';
 import { NoopIndexer } from './noopindexer';
 
 const dir = __dirname.endsWith('dist/src') ? '../' : '';
@@ -10,10 +11,12 @@ const schemaFile = path.join(__dirname, `${dir}../src/schema.gql`);
 const schema = fs.readFileSync(schemaFile, 'utf8');
 const indexer = new NoopIndexer();
 
-const checkpoint = new Checkpoint(config, indexer, schema, {
+const checkpoint = new Checkpoint(schema, {
   logLevel: LogLevel.Info,
-  prettifyLogs: true
+  prettifyLogs: true,
+  overridesConfig: config
 });
+checkpoint.addIndexer(INDEXER_NAME, config, indexer);
 
 async function setupStorageTable() {
   const { knex } = checkpoint.getBaseContext();
@@ -54,7 +57,7 @@ function createCurrentBlockTracker() {
   let initialized = false;
 
   const increaseCurrentBlock = async () => {
-    let current = register.getCurrentBlock();
+    let current = register.getCurrentBlock(INDEXER_NAME);
     if (!initialized) {
       const storage = await knex('storage')
         .where('key', 'currentBlock')
@@ -65,7 +68,7 @@ function createCurrentBlockTracker() {
     const nextValue = current + 1n;
 
     initialized = true;
-    register.setCurrentBlock(nextValue);
+    register.setCurrentBlock(INDEXER_NAME, nextValue);
     await knex('storage')
       .insert({
         key: 'currentBlock',

@@ -4,3 +4,5 @@ export const SCORE_API_URL =
 
 export const NETWORK_COMPUTE_DELAY_SECONDS = 1 * 60 * 60; // 1 hour
 export const SPACE_COMPUTE_DELAY_SECONDS = 1 * 60 * 60; // 1 hour
+
+export const INDEXER_NAME = 'delegate-registry';
