@@ -49,9 +49,13 @@ const DELEGATION_STRATEGIES = [
   'delegation-with-overrides',
   'with-delegation',
   'erc20-balance-of-with-delegation',
-  'spark-with-delegation'
+  'spark-with-delegation',
+  'grove-with-delegation'
 ];
-const WHITELIST_DELEGATES_STRATEGIES = ['spark-with-delegation'];
+const WHITELIST_DELEGATES_STRATEGIES = [
+  'spark-with-delegation',
+  'grove-with-delegation'
+];
 
 const networkDelegationsCache = new Map<string, NetworkCache>();
 const lastSpaceCompute = new Map<string, number>();
